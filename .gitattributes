@@ -1,0 +1,11 @@
+* text=auto
+*.png binary
+*.svg text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.ts text eol=lf
+*.vue text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.ps1 text eol=lf
+functions/api/scf_bootstrap text eol=lf

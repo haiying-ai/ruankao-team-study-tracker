@@ -1,0 +1,33 @@
+{
+  "$schema": "https://static.cloudbase.net/cli/cloudbaserc.schema.json",
+  "envId": "replace-with-your-env-id",
+  "functionRoot": "functions",
+  "functions": [
+    {
+      "name": "api",
+      "runtime": "Nodejs20.19",
+      "handler": "index.main",
+      "timeout": 15,
+      "memorySize": 512,
+      "installDependency": true,
+      "envVariables": { "SETUP_TOKEN": "set-only-during-deploy" }
+    },
+    {
+      "name": "daily-notification",
+      "runtime": "Nodejs20.19",
+      "handler": "index.main",
+      "timeout": 30,
+      "memorySize": 256,
+      "installDependency": true,
+      "envVariables": {
+        "PUSHPLUS_TOKEN": "set-only-during-deploy",
+        "PUSHPLUS_TOPIC": "set-only-during-deploy",
+        "SITE_URL": "https://replace-with-your-env-id.tcloudbaseapp.com"
+      },
+      "triggers": [
+        { "name": "morning-0700", "type": "timer", "config": "0 0 7 * * * *" },
+        { "name": "retry-0710", "type": "timer", "config": "0 10 7 * * * *" }
+      ]
+    }
+  ]
+}

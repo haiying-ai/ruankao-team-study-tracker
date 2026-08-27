@@ -1,0 +1,12 @@
+{
+  "name": "ruankao-cloudbase-api",
+  "private": true,
+  "version": "1.0.0",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/node-sdk": "^3.14.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "serverless-http": "^4.0.0"
+  }
+}

@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.env
+.env.local
+.cloudbase/
+cloudbase.state.json
+coverage/
+*.log
+.cloudbase-deploy/
+.cloudbase-backup/
+deploy/artifacts/
+deploy/*.zip
+qa-*.png

@@ -1,0 +1,12 @@
+{
+  "envId": "ruankao-2026-d6g54aubh2bfed147",
+  "siteUrl": "https://ruankao-2026-d6g54aubh2bfed147-1475355522.tcloudbaseapp.com",
+  "apiFunction": {
+    "name": "api",
+    "source": "functions/api"
+  },
+  "notificationFunction": {
+    "name": "daily-notification",
+    "source": "functions/daily-notification"
+  }
+}

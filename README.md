@@ -1,4 +1,6 @@
-# Ruankao Team Study Tracker
+# 软考团队学习追踪器
+
+`Ruankao Team Study Tracker`
 
 > 面向「系统集成项目管理工程师」备考小组的移动端学习追踪站：把静态课程表变成会自动承接欠账、量化偏差并支持团队互助的执行系统。
 

@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
+import { navigationRuntimeCaching } from './src/utils/pwa-navigation'
 
 export default defineConfig({
   plugins: [
@@ -22,13 +23,18 @@ export default defineConfig({
         ]
       },
       workbox: {
-        navigateFallback: '/index.html',
+        // The default hosting domain may mark non-navigation HTML fetches as
+        // attachments. Never use that response as a precached navigation shell.
+        globPatterns: ['**/*.{js,css,ico,png,svg,webmanifest}'],
+        navigateFallback: null,
+        cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
             urlPattern: ({ url }) => url.pathname.startsWith('/api/'),
             handler: 'NetworkOnly',
             method: 'GET'
-          }
+          },
+          navigationRuntimeCaching
         ]
       }
     })

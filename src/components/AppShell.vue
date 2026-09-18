@@ -8,6 +8,7 @@ const route = useRoute()
 const navItems = computed(() => [
   { to: '/', icon: '☀', label: '今日' },
   { to: '/plan', icon: '▦', label: '计划' },
+  { to: '/memory', icon: '▤', label: '背书' },
   { to: '/progress', icon: '↗', label: '进度' },
   { to: '/team', icon: '♣', label: '团队' },
   { to: '/settings', icon: '⚙', label: '设置' },
@@ -35,7 +36,7 @@ const navItems = computed(() => [
       <slot />
     </main>
 
-    <nav class="bottom-nav" :class="{ 'is-admin': store.isAdmin }" aria-label="主导航">
+    <nav class="bottom-nav" :class="{ 'is-admin': store.isAdmin }" :style="{ gridTemplateColumns: `repeat(${navItems.length}, minmax(0, 1fr))` }" aria-label="主导航">
       <RouterLink
         v-for="item in navItems"
         :key="item.to"

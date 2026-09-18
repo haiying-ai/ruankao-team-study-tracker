@@ -179,10 +179,20 @@ function Deploy-Function([string]$FunctionName, [string]$SourceRelative) {
   if ($PlanOnly) { return }
 
   $before = Get-FunctionState $FunctionName
+  # CLI 3.x ignores --yes in its config-less interactive code-update branch.
+  # A name-only local config selects the non-interactive code-only branch;
+  # Type/Runtime/Handler and all environment settings still come from the cloud.
+  $codeConfigPath = Assert-ChildPath (Join-Path $workRoot "code-update-$FunctionName.json") $workRoot
+  $codeConfig = @{
+    envId = $config.envId
+    functionRoot = '.cloudbase-deploy/stage'
+    functions = @(@{ name = $FunctionName })
+  } | ConvertTo-Json -Depth 4
+  [System.IO.File]::WriteAllText($codeConfigPath, $codeConfig, $utf8NoBom)
   Remove-TcbTemp $FunctionName
   try {
     $deploy = Invoke-Tcb @(
-      '-e', $config.envId, 'fn', 'code', 'update', $FunctionName,
+      '--config-file', $codeConfigPath, '-e', $config.envId, 'fn', 'code', 'update', $FunctionName,
       '--dir', $artifact.Stage, '--deployMode', 'zip', '--yes'
     ) "deploy-$FunctionName" $TimeoutSeconds
     if (-not $deploy.TimedOut -and $deploy.ExitCode -ne 0) {
@@ -225,9 +235,22 @@ function Deploy-Frontend {
   $assetMatch = [regex]::Match($localIndex, 'assets/index-[^"'']+\.js')
   if (-not $assetMatch.Success) { throw 'Unable to identify the local frontend asset hash' }
   $stamp = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-  $remoteIndex = (Invoke-WebRequest -Uri "$($config.siteUrl)/?v=$stamp" -Headers @{ 'Cache-Control' = 'no-cache' } -TimeoutSec 20).Content
+  $remoteIndex = (Invoke-WebRequest -UseBasicParsing -Uri "$($config.siteUrl)/?v=$stamp" -Headers @{ 'Cache-Control' = 'no-cache' } -TimeoutSec 20).Content
   if (-not $remoteIndex.Contains($assetMatch.Value)) { throw 'CDN verification failed: remote index does not reference the new asset' }
+  # A PWA-only fix can leave the main asset hash unchanged. Verify the worker too.
+  $workerPath = Join-Path $projectRoot 'dist/sw.js'
+  if (Test-Path -LiteralPath $workerPath -PathType Leaf) {
+    $workerResponse = Invoke-WebRequest -UseBasicParsing -Uri "$($config.siteUrl)/sw.js?v=$stamp" -Headers @{ 'Cache-Control' = 'no-cache' } -TimeoutSec 20
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+      $remoteWorkerHash = [BitConverter]::ToString($sha.ComputeHash($workerResponse.RawContentStream.ToArray())).Replace('-', '')
+    } finally { $sha.Dispose() }
+    $localWorkerHash = (Get-FileHash -LiteralPath $workerPath -Algorithm SHA256).Hash
+    if ($remoteWorkerHash -ne $localWorkerHash) { throw 'CDN verification failed: service worker hash differs from local build' }
+    Write-Host "Service worker verified: $localWorkerHash" -ForegroundColor Green
+  }
   Write-Host "Frontend verified: $($config.siteUrl)" -ForegroundColor Green
+  Write-Host 'Asset integrity is verified; also smoke-test actual browser navigation and PWA refresh.' -ForegroundColor Yellow
 }
 
 $targets = switch ($Target) {

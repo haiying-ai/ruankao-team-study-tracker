@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useAppStore } from '../stores/app'
 import type { Member } from '../types'
 import { calculateBacklog, calculateLead, completedTaskIds, firstIncompleteTask } from '../utils/progress'
+import { loadTeamMemory } from '../services/team-memory'
+import type { TeamMemorySnapshot } from '../types/team-memory'
 
 const store = useAppStore()
 const copyingMemberId = ref('')
@@ -12,6 +14,109 @@ const inviteMemberName = ref('')
 const inviteDialogOpen = ref(false)
 const inviteCopyStatus = ref('')
 const inviteTextarea = ref<HTMLTextAreaElement | null>(null)
+const memorySnapshot = ref<TeamMemorySnapshot | null>(null)
+const memoryLoading = ref(false)
+const memoryError = ref('')
+const memoryByMember = computed(() => new Map(memorySnapshot.value?.summaries.map((item) => [item.memberId, item]) || []))
+let memoryController: AbortController | undefined
+let memoryGeneration = 0
+let refreshTimer: ReturnType<typeof setInterval> | undefined
+let unmounted = false
+let memoryOwnerToken: string | null = null
+
+function memoryTime(value: string) {
+  return new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(value))
+}
+
+function cancelMemoryRefresh() {
+  memoryGeneration += 1
+  memoryController?.abort()
+  memoryController = undefined
+  memoryLoading.value = false
+}
+
+async function refreshMemory() {
+  if (unmounted || memoryLoading.value || !store.member?.id || document.visibilityState === 'hidden') return
+  if (localStorage.getItem('ruankao.session-token') !== memoryOwnerToken) {
+    memorySnapshot.value = null
+    memoryError.value = '登录状态已变化，请重新进入团队页。'
+    return
+  }
+  if (!navigator.onLine) {
+    memoryError.value = '当前离线，恢复网络后自动更新；下方如有数据，是上次已同步的快照。'
+    return
+  }
+  const owner = store.member.id
+  const generation = ++memoryGeneration
+  const controller = new AbortController()
+  memoryController = controller
+  memoryLoading.value = true
+  memoryError.value = ''
+  try {
+    const snapshot = await loadTeamMemory(controller.signal)
+    if (unmounted || generation !== memoryGeneration || owner !== store.member?.id) return
+    memorySnapshot.value = snapshot
+  } catch (error) {
+    if (unmounted || generation !== memoryGeneration || controller.signal.aborted) return
+    if (localStorage.getItem('ruankao.session-token') !== memoryOwnerToken) {
+      memorySnapshot.value = null
+      memoryError.value = '登录状态已变化，请重新进入团队页。'
+    } else if (error instanceof Error && error.message === 'UNAUTHORIZED') {
+      memorySnapshot.value = null
+      memoryError.value = '登录已过期，请重新登录后查看团队背书进度。'
+    } else {
+      memoryError.value = error instanceof TypeError ? '网络异常，未能更新团队背书进度。' : error instanceof Error ? error.message : '团队背书进度获取失败。'
+    }
+  } finally {
+    if (generation === memoryGeneration) {
+      memoryLoading.value = false
+      memoryController = undefined
+    }
+  }
+}
+
+function resetMemoryOwner() {
+  cancelMemoryRefresh()
+  memorySnapshot.value = null
+  memoryError.value = ''
+  memoryOwnerToken = localStorage.getItem('ruankao.session-token')
+  void refreshMemory()
+}
+
+function refreshOnVisible() {
+  if (document.visibilityState === 'visible') void refreshMemory()
+  else cancelMemoryRefresh()
+}
+
+function handleOffline() {
+  cancelMemoryRefresh()
+  memoryError.value = '当前离线，恢复网络后自动更新；下方如有数据，是上次已同步的快照。'
+}
+
+function handleSessionStorage(event: StorageEvent) {
+  if (event.key !== 'ruankao.session-token' && event.key !== null) return
+  cancelMemoryRefresh()
+  memorySnapshot.value = null
+  memoryError.value = '登录状态已变化，请重新进入团队页。'
+}
+
+watch(() => store.member?.id, resetMemoryOwner, { immediate: true })
+onMounted(() => {
+  refreshTimer = setInterval(() => { void refreshMemory() }, 30000)
+  document.addEventListener('visibilitychange', refreshOnVisible)
+  window.addEventListener('online', refreshMemory)
+  window.addEventListener('offline', handleOffline)
+  window.addEventListener('storage', handleSessionStorage)
+})
+onBeforeUnmount(() => {
+  unmounted = true
+  cancelMemoryRefresh()
+  clearInterval(refreshTimer)
+  document.removeEventListener('visibilitychange', refreshOnVisible)
+  window.removeEventListener('online', refreshMemory)
+  window.removeEventListener('offline', handleOffline)
+  window.removeEventListener('storage', handleSessionStorage)
+})
 const rows = computed(() => (store.snapshot?.members || []).map((member) => {
   const tasks = store.snapshot?.tasks || []
   const done = completedTaskIds(store.snapshot?.completions || [], member.id)
@@ -19,7 +124,7 @@ const rows = computed(() => (store.snapshot?.members || []).map((member) => {
   const checkins = new Set((store.snapshot?.checkins || []).filter((item) => item.memberId === member.id).map((item) => item.date))
   return {
     member, done: done.size, backlog: calculateBacklog(tasks, done, store.today), lead: calculateLead(tasks, done, store.today),
-    current: firstIncompleteTask(tasks, done), checkinDays: checkins.size, latest: attempts[0]
+    current: firstIncompleteTask(tasks, done), checkinDays: checkins.size, latest: attempts[0], memory: memoryByMember.value.get(member.id)
   }
 }).sort((a, b) => b.done - a.done))
 
@@ -109,6 +214,13 @@ async function copyInvite(member: Member) {
 <template>
   <div class="page-stack">
     <section class="page-intro"><span class="eyebrow">TEAM BOARD</span><h2>一起前进，个人 PIN 独立保管</h2><p>排名只用于看清位置和互相提醒；管理员可为成员生成新 PIN 并复制完整邀请文案。</p></section>
+    <section class="team-memory-toolbar" aria-label="团队背书同步">
+      <div><h3>一起背书 · 看见彼此的进展</h3><p>显示云端已同步进度，页面可见时每 30 秒更新。离线背诵记录联网同步后计入。</p><p>稳定掌握 = 不同天连续答对至少 3 次；背书为个人自评，不代表客观考试成绩。</p></div>
+      <button class="secondary-button" type="button" :disabled="memoryLoading" @click="refreshMemory">{{ memoryLoading ? '刷新中…' : '刷新背书进度' }}</button>
+      <p v-if="memorySnapshot" class="memory-update-time">{{ memoryError ? '保留上次数据' : '最近同步' }}：{{ memoryTime(memorySnapshot.generatedAt) }}（北京时间）</p>
+      <p v-else-if="memoryLoading" class="memory-update-time" role="status">正在获取团队背书进度…</p>
+      <p v-if="memoryError" class="memory-error" role="status">{{ memoryError }}</p>
+    </section>
     <p v-if="inviteStatus" class="success-message invite-status">{{ inviteStatus }}<button v-if="inviteText" type="button" @click="inviteDialogOpen = true">重新打开邀请</button></p>
     <section class="team-list">
       <article v-for="(row, index) in rows" :key="row.member.id" class="team-card" :class="{ me: row.member.id === store.member?.id }">
@@ -121,6 +233,12 @@ async function copyInvite(member: Member) {
           <span v-else-if="row.lead" class="status-badge green">领先 {{ row.lead }}</span><span v-else class="status-badge green">正常</span>
           <button v-if="store.isAdmin" class="invite-button" type="button" :disabled="Boolean(copyingMemberId)" @click="copyInvite(row.member)">{{ copyingMemberId === row.member.id ? '生成中…' : '生成分享文案' }}</button>
         </div>
+        <section v-if="row.memory" class="team-memory-progress" :aria-label="`${row.member.displayName}的背书进度`">
+          <div class="memory-overview"><span>已背 <strong>{{ row.memory.reviewed }}/{{ row.memory.total }}</strong> 题</span><span>稳定掌握 <strong>{{ row.memory.stable }}</strong></span><span>待复习 <strong>{{ row.memory.due }}</strong></span><span>需巩固 <strong>{{ row.memory.needsWork }}</strong></span></div>
+          <div class="memory-priority"><span>49 个管理过程 <strong>{{ row.memory.process.reviewed }}/{{ row.memory.process.total }}</strong> · 稳定 {{ row.memory.process.stable }}</span><span>横纵背图 <strong>{{ row.memory.processMap.reviewed }}/{{ row.memory.processMap.total }}</strong> · 稳定 {{ row.memory.processMap.stable }}</span></div>
+          <p>累计自评 {{ row.memory.reviews }} 次 · {{ row.memory.lastReviewedAt ? `最近背诵 ${memoryTime(row.memory.lastReviewedAt)}` : '尚未开始背诵' }}</p>
+        </section>
+        <p v-else class="team-memory-unavailable">{{ memoryLoading ? '正在加载背书进度…' : '暂未获取到背书进度' }}</p>
       </article>
     </section>
     <Teleport to="body">
@@ -137,3 +255,23 @@ async function copyInvite(member: Member) {
     </Teleport>
   </div>
 </template>
+
+<style scoped>
+.team-memory-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px; border: 1px solid var(--line); border-radius: 19px; background: #fff; padding: 18px; }
+.team-memory-toolbar > div { flex: 1 1 320px; }
+.team-memory-toolbar h3 { margin: 0 0 8px; font-size: 16px; }
+.team-memory-toolbar p { margin: 5px 0 0; color: #627870; font-size: 12px; line-height: 1.6; }
+.team-memory-toolbar .memory-update-time, .team-memory-toolbar .memory-error { flex-basis: 100%; }
+.team-memory-toolbar .memory-error { color: #a53c2e; }
+.team-memory-progress, .team-memory-unavailable { grid-column: 3 / -1; border-top: 1px solid #e3eae6; padding-top: 12px; min-width: 0; }
+.memory-overview, .memory-priority { display: flex; flex-wrap: wrap; gap: 8px 18px; color: #50675f; font-size: 12px; }
+.memory-overview strong { color: var(--ink); font-size: 16px; }
+.memory-priority { margin-top: 10px; }
+.memory-priority span { padding: 7px 9px; background: #edf5ef; border-radius: 8px; line-height: 1.6; }
+.team-memory-progress p, .team-memory-unavailable { color: #70847b; font-size: 11px; line-height: 1.6; margin: 8px 0 0; }
+@media (max-width: 600px) {
+  .team-memory-progress, .team-memory-unavailable { grid-column: 1 / -1; }
+  .memory-overview { gap: 9px 15px; }
+  .memory-priority { display: grid; }
+}
+</style>

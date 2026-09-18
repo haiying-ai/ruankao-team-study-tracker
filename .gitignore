@@ -11,3 +11,4 @@ coverage/
 deploy/artifacts/
 deploy/*.zip
 qa-*.png
+.flashcard-work/

@@ -5,6 +5,9 @@ const express = require('express')
 const cors = require('cors')
 const serverless = require('serverless-http')
 const cloudbase = require('@cloudbase/node-sdk')
+const memoryStore = import('../../shared/memory-store.mjs')
+const memoryTeam = import('../../shared/memory-team.mjs')
+const memoryCards = require('../../src/data/memory-cards.json')
 
 const tcb = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
 const db = tcb.database()
@@ -152,6 +155,44 @@ app.post('/exam-attempts', authenticate, async (req, res) => {
   return result(res, { id }, 201)
 })
 
+// The optional owner header is only an assertion against the authenticated
+// identity. It prevents an old browser queue from being replayed after logout.
+const requireMemoryOwner = (req, res, next) => {
+  const expected = req.headers['x-memory-member']
+  if (expected && expected !== req.member.id) return fail(res, '成员已切换，请重新进入背书', 403)
+  next()
+}
+
+app.get('/memory', authenticate, requireMemoryOwner, async (req, res) => {
+  try {
+    const { listMemoryStates } = await memoryStore
+    return result(res, { memberId: req.member.id, states: await listMemoryStates(db, req.member.id) })
+  } catch (error) { return fail(res, `读取背书进度失败：${error.message}`, 500) }
+})
+
+// Team members can compare aggregate progress, but cannot read another
+// member's card states, review events, PIN data or application configuration.
+app.get('/memory/team', authenticate, async (_req, res) => {
+  res.set('Cache-Control', 'no-store')
+  try {
+    const [{ listMemoryStates }, { buildMemoryTeamSummary }] = await Promise.all([memoryStore, memoryTeam])
+    const [members, states] = await Promise.all([rows('members', { active: true }), listMemoryStates(db)])
+    return result(res, buildMemoryTeamSummary(members, memoryCards, states))
+  } catch (error) { return fail(res, `读取团队背书进度失败：${error.message}`, 500) }
+})
+
+app.post('/memory/review', authenticate, requireMemoryOwner, async (req, res) => {
+  try {
+    const { validateMemoryReview, persistMemoryReview } = await memoryStore
+    const problem = validateMemoryReview(req.body)
+    if (problem) return fail(res, problem)
+    // Client memberId/reviewedAt are deliberately ignored. Only the session
+    // owner and server clock determine the stored review and its due date.
+    const saved = await persistMemoryReview(db, req.member.id, req.body, new Date())
+    return result(res, { memberId: req.member.id, ...saved })
+  } catch (error) { return fail(res, `保存背书进度失败：${error.message}`, 500) }
+})
+
 app.put('/admin/tasks', authenticate, requireAdmin, async (req, res) => {
   const task = req.body || {}; if (!task.id || !task.title || !task.plannedDate) return fail(res, '任务字段不完整')
   await db.collection('plan_tasks').doc(task.id).set(task); return result(res, { ok: true })
@@ -172,7 +213,9 @@ app.put('/admin/members', authenticate, requireAdmin, async (req, res) => {
 
 app.get('/admin/export', authenticate, requireAdmin, async (_req, res) => {
   const [members, tasks, completions, checkins, attempts] = await Promise.all([rows('members'), rows('plan_tasks'), rows('completions'), rows('checkins'), rows('exam_attempts')])
-  return result(res, JSON.stringify({ exportedAt: new Date().toISOString(), data: { members: members.map(cleanDoc), tasks: tasks.map(cleanDoc), completions: completions.map(cleanDoc), checkins: checkins.map(cleanDoc), attempts: attempts.map(cleanDoc) } }, null, 2))
+  const { listMemoryStates } = await memoryStore
+  const memoryStates = await listMemoryStates(db)
+  return result(res, JSON.stringify({ exportedAt: new Date().toISOString(), data: { members: members.map(cleanDoc), tasks: tasks.map(cleanDoc), completions: completions.map(cleanDoc), checkins: checkins.map(cleanDoc), attempts: attempts.map(cleanDoc), memoryStates } }, null, 2))
 })
 app.post('/admin/import-plan', authenticate, requireAdmin, async (req, res) => {
   const tasks = req.body?.tasks; if (!Array.isArray(tasks) || !tasks.length) return fail(res, '计划JSON无有效任务')

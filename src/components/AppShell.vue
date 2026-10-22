@@ -2,18 +2,25 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAppStore } from '../stores/app'
+import { EXAM_CALM_MODE } from '../config/exam-calm'
 
 const store = useAppStore()
 const route = useRoute()
-const navItems = computed(() => [
-  { to: '/', icon: '☀', label: '今日' },
-  { to: '/plan', icon: '▦', label: '计划' },
-  { to: '/memory', icon: '▤', label: '背书' },
-  { to: '/progress', icon: '↗', label: '进度' },
-  { to: '/team', icon: '♣', label: '团队' },
-  { to: '/settings', icon: '⚙', label: '设置' },
-  ...(store.isAdmin ? [{ to: '/admin', icon: '✎', label: '管理' }] : [])
-])
+const navItems = computed(() => EXAM_CALM_MODE
+  ? [
+      { to: '/', icon: '☀', label: '安心' },
+      { to: '/memory', icon: '▤', label: '背书' },
+      { to: '/settings', icon: '⚙', label: '设置' }
+    ]
+  : [
+      { to: '/', icon: '☀', label: '今日' },
+      { to: '/plan', icon: '▦', label: '计划' },
+      { to: '/memory', icon: '▤', label: '背书' },
+      { to: '/progress', icon: '↗', label: '进度' },
+      { to: '/team', icon: '♣', label: '团队' },
+      { to: '/settings', icon: '⚙', label: '设置' },
+      ...(store.isAdmin ? [{ to: '/admin', icon: '✎', label: '管理' }] : [])
+    ])
 </script>
 
 <template>

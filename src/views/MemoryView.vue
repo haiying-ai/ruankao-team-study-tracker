@@ -40,13 +40,6 @@ const categories = [
   { id: 'tool', label: '工具方法' }
 ]
 const filtered = computed(() => cards.filter((card) => category.value === 'all' || card.category === category.value))
-const stateMap = computed(() => new Map(states.value.map((state) => [state.cardId, state])))
-const newCount = computed(() => filtered.value.filter((card) => !stateMap.value.has(card.id)).length)
-const dueCount = computed(() => filtered.value.filter((card) => {
-  const state = stateMap.value.get(card.id)
-  return state && state.nextReviewAt <= today.value
-}).length)
-const stableCount = computed(() => filtered.value.filter((card) => (stateMap.value.get(card.id)?.streak || 0) >= 3).length)
 const nextRound = computed(() => memoryQueue(filtered.value, states.value, today.value, mode.value))
 const card = computed(() => round.value[position.value])
 const finished = computed(() => started.value && position.value >= round.value.length)
@@ -125,7 +118,7 @@ async function grade(correct: boolean) {
     offline.value = result.offline
     if (correct) right.value++
     else wrongIds.value.push(current.id)
-    notice.value = `${correct ? '✓ 已记住' : '✕ 需加强'} · 下次复习 ${result.state.nextReviewAt}（${result.offline ? '已保存到本机，待同步' : '已保存'}）`
+    notice.value = result.offline ? '已保存到本机，联网后会同步。慢慢来，随时可以休息。' : '已保存。慢慢来，随时可以休息。'
     position.value++
     revealed.value = false
     eventId.value = newEventId()
@@ -181,8 +174,8 @@ onBeforeUnmount(() => {
   <div class="page-stack memory-page">
     <section class="page-intro">
       <span class="eyebrow">ACTIVE RECALL · 主动回忆</span>
-      <h2>先想起来，再翻答案</h2>
-      <p>概念、公式、49个管理过程与工具方法。49过程既可逐项背，也可按过程组纵向背、按知识领域横向背。</p>
+      <h2>想复习时，就翻几张</h2>
+      <p>不比数量，不赶进度。想看哪一部分，就轻轻复习哪一部分。</p>
     </section>
 
     <div v-if="offline || pending" class="memory-sync" role="status">
@@ -195,39 +188,33 @@ onBeforeUnmount(() => {
       <summary>{{ categories.find((item) => item.id === category)?.label }} · {{ mode === 'daily' ? '每日复习' : '全量自测' }} <span>选择模块 / 模式</span></summary>
       <div class="options-body" role="region" aria-label="背书设置">
       <div class="mode-switch">
-        <button type="button" :class="{ selected: mode === 'daily' }" :aria-pressed="mode === 'daily'" :disabled="saving" @click="mode = 'daily'">每日复习 <small>错卡优先 · 间隔记忆</small></button>
-        <button type="button" :class="{ selected: mode === 'all' }" :aria-pressed="mode === 'all'" :disabled="saving" @click="mode = 'all'">全量自测 <small>不看日期 · 逐张检测</small></button>
+        <button type="button" :class="{ selected: mode === 'daily' }" :aria-pressed="mode === 'daily'" :disabled="saving" @click="mode = 'daily'">轻松复习 <small>系统帮你挑选卡片</small></button>
+        <button type="button" :class="{ selected: mode === 'all' }" :aria-pressed="mode === 'all'" :disabled="saving" @click="mode = 'all'">自由自测 <small>按自己节奏看看</small></button>
       </div>
       <div class="category-tabs" aria-label="知识范围">
-        <button v-for="item in categories" :key="item.id" type="button" :class="{ selected: category === item.id }" :aria-pressed="category === item.id" :disabled="saving" @click="category = item.id">{{ item.label }} <span>{{ cards.filter((c) => item.id === 'all' || c.category === item.id).length }}</span></button>
+        <button v-for="item in categories" :key="item.id" type="button" :class="{ selected: category === item.id }" :aria-pressed="category === item.id" :disabled="saving" @click="category = item.id">{{ item.label }}</button>
       </div>
       <p v-if="category === 'process-map'" class="memory-hint process-map-hint">5 道纵向题：回忆每个过程组的全部过程；10 道横向题：回忆每个知识领域的全部过程。先默写清单，再核对数量、名称与归属；遗漏或错位均建议选“还没记住”。</p>
-      <div class="memory-metrics">
-        <div><strong>{{ dueCount }}</strong><span>到期复习</span></div>
-        <div><strong>{{ newCount }}</strong><span>尚未学习</span></div>
-        <div><strong>{{ stableCount }}</strong><span>连续答对 ≥3 次</span></div>
-      </div>
-      <p class="memory-hint">{{ mode === 'daily' ? '每轮包含全部到期卡＋最多20张新卡，错卡优先。' : `本轮覆盖所选范围全部 ${filtered.length} 张卡，不跳过已学会的内容。` }}切换模式或范围会开始新一轮，已保存的记录不受影响。</p>
+      <p class="memory-hint">没有必须完成的数量。想背就开始，觉得累了就停下来；已保存的记录不会丢失。</p>
       </div>
     </details>
 
     <div v-if="loading" class="empty-state" role="status">正在加载你的记忆记录…</div>
     <section v-else-if="!started" class="panel-card memory-start">
       <span class="eyebrow">{{ mode === 'daily' ? 'TODAY’S PRACTICE' : 'COMPLETE CHECK' }}</span>
-      <h3>{{ nextRound.length ? `准备好回忆这 ${nextRound.length} 张卡了吗？` : '今天的复习已完成' }}</h3>
-      <p>{{ nextRound.length ? '只看问题 → 独立回忆 → 查看答案 → 自评对错。模糊不清也建议选“还没记住”。' : '可切换「全量自测」提前复习，或明天回来巩固。' }}</p>
-      <button v-if="nextRound.length" type="button" class="primary-button" :disabled="!!error" @click="start()">{{ mode === 'daily' ? '开始背书' : '开始全量自测' }} →</button>
-      <button v-else type="button" class="secondary-button" @click="mode = 'all'">进入全量自测</button>
+      <h3>{{ nextRound.length ? '准备好了吗？' : '今天已经复习得很好了' }}</h3>
+      <p>{{ nextRound.length ? '先想一想，再看答案。答得模糊也没关系，知道哪里还想再看看就够了。' : '想再看几张时，可以随时选择自由自测。' }}</p>
+      <button v-if="nextRound.length" type="button" class="primary-button" :disabled="!!error" @click="start()">开始轻松复习</button>
+      <button v-else type="button" class="secondary-button" @click="mode = 'all'">自由看看</button>
     </section>
 
     <template v-else>
-      <div ref="roundAnchor" class="round-progress" aria-label="本轮进度">
-        <span>本轮已完成 {{ position }} / {{ round.length }}</span><span>✓ {{ right }}　✕ {{ wrongIds.length }}</span>
-        <div class="linear-progress"><span :style="{ width: `${progress}%` }"></span></div>
+      <div ref="roundAnchor" class="round-progress calm-round" aria-label="当前复习">
+        <span>慢慢来，想好再看答案；随时可以停下来休息。</span>
       </div>
       <p v-if="notice" class="save-notice" role="status">{{ notice }}</p>
       <section v-if="card && !finished" :key="card.id" class="panel-card recall-card">
-        <div class="card-topline"><span class="eyebrow">{{ categories.find((c) => c.id === card.category)?.label }}</span><span>{{ position + 1 }} / {{ round.length }}</span></div>
+        <div class="card-topline"><span class="eyebrow">{{ categories.find((c) => c.id === card.category)?.label }}</span></div>
         <div v-if="revealed" class="memory-tags"><span v-for="tag in card.tags" :key="tag">{{ tag }}</span></div>
         <h3>{{ card.prompt }}</h3>
         <p v-if="!revealed" class="think-hint">先试着说出答案，也可以在纸上默写。想好后再揭晓。</p>
@@ -239,19 +226,19 @@ onBeforeUnmount(() => {
           <details class="card-sources"><summary>讲义出处 · PDF 页码</summary><ul><li v-for="source in card.sources" :key="`${source.document}:${source.page}`">{{ source.document }} · 第 {{ source.page }} 页</li></ul></details>
           <p class="memory-hint">按实际回忆结果自评；系统不自动判断你的口述答案。</p>
           <div class="grade-buttons">
-            <button type="button" class="grade-wrong" :disabled="saving" @click="grade(false)"><b>✕</b> 还没记住<small>次日优先复习</small></button>
-            <button type="button" class="grade-right" :disabled="saving" @click="grade(true)"><b>✓</b> 已经记住<small>逐步延长间隔</small></button>
+            <button type="button" class="grade-wrong" :disabled="saving" @click="grade(false)"><b>✕</b> 还想再看看<small>没关系，慢慢来</small></button>
+            <button type="button" class="grade-right" :disabled="saving" @click="grade(true)"><b>✓</b> 我记住了<small>做得很好</small></button>
           </div>
           <p v-if="saving" class="memory-hint" role="status">正在保存…</p>
         </div>
       </section>
       <section v-else-if="finished" class="panel-card memory-start" aria-live="polite">
-        <span class="eyebrow">ROUND COMPLETE</span><h3>这一轮，完成了</h3>
-        <p>共检测 {{ round.length }} 张：记住 {{ right }} 张，还需加强 {{ wrongIds.length }} 张。{{ pending ? '本机记录已保存，联网后继续同步。' : '个人复习记录已保存。' }}</p>
-        <div class="finish-actions"><button v-if="wrongIds.length" type="button" class="primary-button" @click="retryWrong">再背本轮错卡</button><button type="button" class="secondary-button" @click="changeScope">返回背书首页</button></div>
+        <span class="eyebrow">TAKE A BREATH</span><h3>这一会儿就很好</h3>
+        <p>{{ pending ? '复习记录已保存在本机，联网后会同步。' : '复习记录已保存。' }}现在可以休息一下，也可以按自己的心情再翻几张。</p>
+        <div class="finish-actions"><button v-if="wrongIds.length" type="button" class="primary-button" @click="retryWrong">再看一看</button><button type="button" class="secondary-button" @click="changeScope">回到背书首页</button></div>
       </section>
     </template>
-    <p class="schedule-note">记忆间隔：答错 → 次日；连续答对 → 1 / 3 / 7 / 14 / 30 天。同一天重复答对不叠加升级。复习日期使用北京时间，与你的学习计划预览日期无关。</p>
+    <p class="schedule-note">所有背书记录都会妥善保存。临近考试，请把节奏放在自己手里。</p>
   </div>
 </template>
 

@@ -1,5 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { hasStoredSession } from './services/api'
+import { CALM_HIDDEN_ROUTE_NAMES, EXAM_CALM_MODE } from './config/exam-calm'
 
 const routes = [
   { path: '/login', name: 'login', component: () => import('./views/LoginView.vue'), meta: { public: true } },
@@ -17,5 +18,6 @@ export const router = createRouter({ history: createWebHashHistory(), routes })
 router.beforeEach((to) => {
   if (to.meta.public) return hasStoredSession() ? { name: 'today' } : true
   if (!hasStoredSession()) return { name: 'login', query: { redirect: to.fullPath } }
+  if (EXAM_CALM_MODE && typeof to.name === 'string' && CALM_HIDDEN_ROUTE_NAMES.has(to.name)) return { name: 'today' }
   return true
 })

@@ -1,0 +1,44 @@
+name: Bug 报告
+description: 报告一个可复现的问题
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提交前请先搜索已有 Issue，避免重复。
+        安全问题请勿在此提交，见 [SECURITY.md](https://github.com/haiying-ai/ruankao-team-study-tracker/blob/main/SECURITY.md)。
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 问题描述
+      description: 发生了什么？预期是什么？
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 打开……页面
+        2. 点击……
+        3. 看到……
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: 环境信息
+      placeholder: |
+        OS: Windows 11 / macOS 15 / Android 15 / iOS 18
+        浏览器: Chrome 131 / Safari 18
+        访问方式: 本地 dev / 线上部署地址
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志或截图
+      description: 请粘贴控制台报错或界面截图；注意先删除密钥、用户数据等敏感内容
+      render: shell
+    validations:
+      required: false

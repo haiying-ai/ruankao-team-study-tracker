@@ -8,6 +8,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript&logoColor=white)
 ![CloudBase](https://img.shields.io/badge/Tencent-CloudBase-006eff)
 ![PWA](https://img.shields.io/badge/Mobile-PWA-5a0fc8?logo=pwa&logoColor=white)
+![License](https://img.shields.io/badge/license-MIT-blue)
 
 [在线站点](https://ruankao-2026-d6g54aubh2bfed147-1475355522.tcloudbaseapp.com) · [部署指南](docs/deployment.md) · [架构与规则](docs/architecture.md)
 
@@ -188,3 +189,7 @@ ruankao-team-study-tracker/
 ## 适用场景
 
 当前数据为软考中项备考计划，但任务类型、滚动排期、团队偏差和成绩记录模型可复用于读书会、证书考试、训练营或小型学习小组。替换 `src/data/plan.ts` 和站点配置即可构建新的周期计划。
+
+## License
+
+[MIT](./LICENSE)

@@ -13,6 +13,10 @@ jobs:
   test:
     name: 类型检查与单元测试
     runs-on: ubuntu-latest
+    env:
+      # 项目的日期逻辑全部按北京时间处理，用例中有以 +08:00 解析后再取
+      # 本地星期几的断言。统一时区可让 CI 与开发机行为一致。
+      TZ: Asia/Shanghai
     steps:
       - uses: actions/checkout@v4
 

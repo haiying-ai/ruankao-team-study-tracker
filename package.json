@@ -19,7 +19,7 @@
     "deploy:notification": "powershell -ExecutionPolicy Bypass -File scripts/deploy-cloudbase.ps1 -Target Notification"
   },
   "dependencies": {
-    "@cloudbase/node-sdk": "^3.14.0",
+    "@cloudbase/node-sdk": "^4.2.1",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "pinia": "^3.0.3",

@@ -4,6 +4,7 @@
 
 > 面向「系统集成项目管理工程师」备考小组的移动端学习追踪站：把静态课程表变成会自动承接欠账、量化偏差并支持团队互助的执行系统。
 
+[![CI](https://github.com/haiying-ai/ruankao-team-study-tracker/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/haiying-ai/ruankao-team-study-tracker/actions/workflows/ci.yml)
 ![Vue 3](https://img.shields.io/badge/Vue-3.5-42b883?logo=vuedotjs&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript&logoColor=white)
 ![CloudBase](https://img.shields.io/badge/Tencent-CloudBase-006eff)

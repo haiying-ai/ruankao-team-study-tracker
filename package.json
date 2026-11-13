@@ -37,5 +37,8 @@
     "vite-plugin-pwa": "^1.0.3",
     "vitest": "^3.2.4",
     "vue-tsc": "^3.0.6"
+  },
+  "overrides": {
+    "proxy-addr": "2.0.8"
   }
 }
